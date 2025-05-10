@@ -1,29 +1,44 @@
 {
-  "- name": "\"MyApplication\"",
-  "type": "\"WebService\"",
-  "properties": {
-    "configs": {
-      "private": {
-        "version": "\"1.0\"",
-        "schema": {
-          "type": "\"object\"",
-          "properties": {
-            "port": {
+  "MyApplication": {
+    "name": "MyApplication",
+    "type": "WebService",
+    "properties": {
+      "configs": {
+        "private": {
+          "version": "1.0",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "port": {
+                "type": "integer",
+                "default": 8080
+              },
               "logging_level": {
-                "global_configs": {
-                  "feature_flags": {
-                    "new_dashboard": "true",
-                    "experimental_api": "false",
-                    "timeout_settings": {
-                      "connect_ms": "5000",
-                      "read_ms": "10000"
-                    }
-                  }
-                }
+                "type": "string",
+                "default": "INFO"
               }
+            }
+          },
+          "records": {
+            "app_specific_value": "Value from perf_records for app_specific_value placeholder",
+            "default_replicas": 5,
+            "app_version": "1.2.3-perf",
+            "db_host": "perf-db.example.com",
+            "db_user": "perf_user",
+            "from_perf_records": true,
+            "complex_url": "http://perf-db.example.com/api?user=perf_user",
+            "default_app_setting": "perf_default_value",
+            "redis": {
+              "host": "redis.example.com",
+              "port": 6379,
+              "password": "redis_password"
             }
           }
         }
+      },
+      "deployment": {
+        "replicas": "5",
+        "image": "myapp:1.2.3-perf"
       }
     }
   }

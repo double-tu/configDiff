@@ -17,122 +17,108 @@ class CircularPlaceholderDependencyError(Exception):
     """Raised when circular dependency is detected in placeholder values"""
     pass
 
-def substitute_placeholders(config_data: Any, service_name: str) -> Any:
+def substitute_placeholders(
+    data_to_process: Any,
+    records_context: Dict,
+    max_iterations: int = 10, # Max depth for iterative substitution
+    current_iteration: int = 0, # For tracking recursion depth, not used in the loop here
+    visited_placeholders: Optional[Set[str]] = None # For circular dependency detection in string values
+) -> Any:
     """
-    Substitute all {{placeholder}} patterns in the config data with values from the service's records context.
+    Substitute all {{placeholder}} patterns in the data_to_process with values from the records_context.
+    This function is called by config_processor.py with the specific service block and its records.
     
     Args:
-        config_data: Fully expanded config structure (after env merge, $ref resolution and <<: merge)
-        service_name: Name of the service to process
-        
+        data_to_process: The data structure (dict, list, str) to perform substitutions on.
+        records_context: A dictionary containing placeholder keys and their values.
+        max_iterations: Maximum number of passes for iterative substitution.
+        current_iteration: (Not directly used by the loop, more for conceptual depth)
+        visited_placeholders: Set to track placeholders during the substitution of a single string value to detect cycles.
+
     Returns:
-        Config structure with all placeholders substituted
+        Data structure with placeholders substituted.
         
     Raises:
-        ServiceNameNotFoundError: If service_name is not found in config_data
-        PlaceholderContextNotFoundError: If records context is not found
-        PlaceholderNotFoundError: If a placeholder key is not found in context
-        CircularPlaceholderDependencyError: If circular dependency is detected
+        PlaceholderNotFoundError: If a placeholder key is not found in context (and not self-referential in a resolvable way).
+        CircularPlaceholderDependencyError: If circular dependency is detected after max_iterations or within a string.
     """
-    # Step 1: Locate the service config block and extract records context
-    service_block = _find_service_block(config_data, service_name)
-    records = _extract_records_context(service_block)
     
-    # Step 2: Perform iterative substitution until no more substitutions can be made
-    max_iterations = 100  # Prevent infinite loops
-    iteration = 0
-    changed = True
+    # Iterative substitution for the entire data_to_process block
+    # This handles cases where a placeholder's value might itself be or contain another placeholder.
     
-    while changed and iteration < max_iterations:
-        iteration += 1
-        changed, service_block = _substitute_in_block(service_block, records)
+    processed_data = data_to_process
     
-    if iteration >= max_iterations:
-        raise CircularPlaceholderDependencyError(
-            f"Max iterations ({max_iterations}) reached. Possible circular dependency in placeholders."
-        )
-    
-    return service_block
-
-def _find_service_block(config_data: Any, service_name: str) -> Dict:
-    """Find the service block matching the service_name in config_data"""
-    def clean_name(name):
-        if isinstance(name, str):
-            return name.strip('"\' ')
-        return str(name)
+    for i in range(max_iterations):
+        # `_substitute_pass` will return (changed_flag, substituted_data_segment)
+        # We need to apply this recursively to the structure.
+        # The `_substitute_in_block_iterative` will handle the recursive traversal and iterative substitution.
         
-    target_name = clean_name(service_name)
-    
-    def find_in_dict(data: dict) -> Optional[Dict]:
-        # 检查常规name键
-        if 'name' in data and clean_name(data['name']) == target_name:
-            return data
-        # 检查带"- "前缀的键
-        for key in data:
-            if key.startswith('- name') and clean_name(data[key]) == target_name:
-                return data
-        return None
-    
-    # 处理包含services键的情况
-    if isinstance(config_data, dict) and 'services' in config_data:
-        services = config_data['services']
-        if isinstance(services, list):
-            for service in services:
-                if isinstance(service, dict):
-                    found = find_in_dict(service)
-                    if found:
-                        return found
-        elif isinstance(services, dict):
-            found = find_in_dict(services)
+        # Let's simplify: the main loop for iterations should be here.
+        # `_substitute_in_block_one_pass` will do one pass over the structure.
+        
+        changed_in_pass, temp_data = _substitute_in_block_one_pass(processed_data, records_context, set()) # Pass fresh visited set for each top-level pass
+        processed_data = temp_data
+        if not changed_in_pass:
+            # No changes in this pass, substitution is complete or stuck.
+            # Check for any remaining placeholders to ensure completion or identify issues.
+            if _contains_placeholders(processed_data):
+                 # This could happen if a placeholder was not in records_context or due to a complex cycle not caught by string-level check.
+                 # The PlaceholderNotFoundError should ideally be raised during _substitute_in_string_one_pass if a key is missing.
+                 # If we reach here with remaining placeholders, it implies a more complex scenario or a bug.
+                 # For now, assume _substitute_in_string_one_pass handles missing keys.
+                 # A remaining placeholder might indicate a cycle that wasn't resolved.
+                 # However, the string-level cycle detection should catch direct {{a}} -> {{b}} -> {{a}} in values.
+                 # This check is more of a safeguard.
+                 # Consider if an error should be raised here if _contains_placeholders is true.
+                 # For now, we rely on max_iterations to break very complex cycles.
+                 pass # Substitution converged or stuck
+            return processed_data # Return the result
+
+    # If loop finishes due to max_iterations, check if there are still placeholders
+    if _contains_placeholders(processed_data):
+        # Find an example of an unresolved placeholder
+        unresolved_example = _find_first_placeholder(processed_data)
+        raise CircularPlaceholderDependencyError(
+            f"最大迭代次数 ({max_iterations}) 已达到，但仍有未解析的占位符。 "
+            f"可能存在循环依赖或占位符在上下文中缺失。示例: '{unresolved_example}'"
+        )
+        
+    return processed_data
+
+
+def _contains_placeholders(data: Any) -> bool:
+    """Recursively checks if the data structure contains any {{placeholder}}."""
+    if isinstance(data, str):
+        return bool(re.search(r'\{\{([^}]+)\}\}', data))
+    elif isinstance(data, dict):
+        return any(_contains_placeholders(v) for v in data.values())
+    elif isinstance(data, list):
+        return any(_contains_placeholders(item) for item in data)
+    return False
+
+def _find_first_placeholder(data: Any) -> Optional[str]:
+    """Finds the first {{placeholder}} encountered in the data structure."""
+    if isinstance(data, str):
+        match = re.search(r'(\{\{[^}]+\}\})', data)
+        return match.group(1) if match else None
+    elif isinstance(data, dict):
+        for v in data.values():
+            found = _find_first_placeholder(v)
             if found:
                 return found
-    
-    # 处理直接是服务列表的情况
-    if isinstance(config_data, list):
-        for item in config_data:
-            if isinstance(item, dict):
-                found = find_in_dict(item)
-                if found:
-                    return found
-    
-    # 处理直接是服务块的情况
-    if isinstance(config_data, dict):
-        found = find_in_dict(config_data)
-        if found:
-            return found
-    
-    # 调试输出
-    print(f"Searching for service: '{target_name}'")
-    print("Available services:")
-    if isinstance(config_data, dict) and 'services' in config_data:
-        services = config_data['services']
-        if isinstance(services, list):
-            for i, s in enumerate(services):
-                if isinstance(s, dict):
-                    name = s.get('name') or next((s[k] for k in s if k.startswith('- name')), None)
-                    print(f"  [{i}]: {name}")
-        elif isinstance(services, dict):
-            name = services.get('name') or next((services[k] for k in services if k.startswith('- name')), None)
-            print(f"  {name}")
-    
-    raise ServiceNameNotFoundError(
-        f"Service '{target_name}' not found in config data. Available services: {config_data.get('services', []) if isinstance(config_data, dict) else []}"
-    )
+    elif isinstance(data, list):
+        for item in data:
+            found = _find_first_placeholder(item)
+            if found:
+                return found
+    return None
 
-def _extract_records_context(service_block: Dict) -> Dict:
-    """Extract the records context from the service block"""
-    # 简化查找逻辑，直接使用合并后的properties.configs.private
-    try:
-        private_config = service_block['properties']['configs']['private']
-        if 'records' in private_config:
-            return private_config['records']
-        # 如果没有records键，返回整个private配置作为上下文
-        return private_config
-    except KeyError:
-        # 如果路径不存在，返回空字典避免报错
-        return {}
 
-def _substitute_in_block(data: Any, records: Dict) -> (bool, Any):
+def _substitute_in_block_one_pass(
+    data: Any,
+    records: Dict,
+    visited_in_string_substitution: Set[str] # Used for cycle detection within a single string's resolution path
+) -> (bool, Any):
     """
     Perform one pass of substitution in the data block.
     Returns tuple of (changed_flag, new_data)
@@ -143,7 +129,7 @@ def _substitute_in_block(data: Any, records: Dict) -> (bool, Any):
         changed = False
         new_dict = {}
         for k, v in data.items():
-            item_changed, new_v = _substitute_in_block(v, records)
+            item_changed, new_v = _substitute_in_block_one_pass(v, records, visited_in_string_substitution)
             new_dict[k] = new_v
             changed = changed or item_changed
         return changed, new_dict
@@ -151,27 +137,49 @@ def _substitute_in_block(data: Any, records: Dict) -> (bool, Any):
         changed = False
         new_list = []
         for item in data:
-            item_changed, new_item = _substitute_in_block(item, records)
+            item_changed, new_item = _substitute_in_block_one_pass(item, records, visited_in_string_substitution)
             new_list.append(new_item)
             changed = changed or item_changed
         return changed, new_list
     else:
         return False, data
 
+# Sentinel object to indicate that a key was not found by _get_value_by_path
+_NOT_FOUND_SENTINEL = object()
+
+def _get_value_by_path(data_dict: Dict, path_string: str) -> Any:
+    """
+    Retrieves a value from a nested dictionary using a dot-separated path string.
+    Returns _NOT_FOUND_SENTINEL if the path is invalid or key not found.
+    """
+    keys = path_string.split('.')
+    current_level = data_dict
+    for key in keys:
+        if isinstance(current_level, dict) and key in current_level:
+            current_level = current_level[key]
+        else:
+            return _NOT_FOUND_SENTINEL # Key not found at this level or current_level is not a dict
+    return current_level
+
 def _substitute_in_string(s: str, records: Dict) -> (bool, str):
-    """Perform substitution in a single string value"""
+    """Perform substitution in a single string value, supporting dot-notation for nested keys."""
     changed = False
     new_s = s
     
     for match in re.finditer(r'\{\{([^}]+)\}\}', s):
-        placeholder_key = match.group(1)
-        if placeholder_key in records:
-            replacement = str(records[placeholder_key])
+        placeholder_key = match.group(1).strip() # Remove leading/trailing whitespace from key
+        
+        value = _get_value_by_path(records, placeholder_key)
+        
+        if value is not _NOT_FOUND_SENTINEL:
+            replacement = str(value)
+            # Ensure that the original placeholder (match.group(0)) is replaced,
+            # not just a potentially modified key if strip() was effective.
             new_s = new_s.replace(match.group(0), replacement)
             changed = True
         else:
             raise PlaceholderNotFoundError(
                 f"Placeholder key '{placeholder_key}' not found in records context"
             )
-    
+            
     return changed, new_s

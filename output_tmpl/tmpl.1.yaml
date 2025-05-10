@@ -1,0 +1,8 @@
+configs:
+  private:
+    redis:
+      host: redis.example.com
+      port: '6379'
+      password: redis_password
+      default_replicas: 5
+      app_version: 1.2.3-perf
