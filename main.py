@@ -66,30 +66,53 @@ def process_template_files(tmpl_input_dir, tmpl_output_dir, records_context, ser
                 
                 logging.debug(f"Processing template file: {input_filepath}")
 
-                if filename.endswith('.properties.tmpl'):
+                # Updated file type detection logic
+                if '.properties' in filename:
                     # Convert .properties to dict
                     data_to_substitute = convert_properties_to_dict(content)
                     # Substitute placeholders
                     substituted_data = substitute_placeholders(data_to_substitute, records_context)
-                    # Change extension for output
-                    output_filepath = output_filepath.replace('.properties.tmpl', '.properties.tmpl.yaml')
-                    with open(output_filepath, 'w', encoding='utf-8') as f_out:
-                        yaml.dump(substituted_data, f_out, allow_unicode=True, sort_keys=False)
-                    logging.info(f"Processed and wrote {filename} to {output_filepath}")
+                    # Output filename: original_filename.yaml
+                    # Example: tmpl.xxx1.properties -> output_tmpl/tmpl.xxx1.properties.yaml
+                    # Example: xxx3.properties.tmpl -> output_tmpl/xxx3.properties.tmpl.yaml
+                    # The relative_path already includes the original filename.
+                    # We just need to ensure the output_filepath in the tmpl_output_dir has .yaml appended.
+                    # If output_filepath already ends with .yaml (e.g. if original was .properties.yaml), this is fine.
+                    # However, the instruction is to *append* .yaml to the *original* filename.
+                    # The current output_filepath is os.path.join(tmpl_output_dir, relative_path)
+                    # So, if relative_path is "tmpl.xxx1.properties", output_filepath becomes "output_tmpl/tmpl.xxx1.properties"
+                    # We need to append ".yaml" to this.
+                    
+                    # Construct the correct output filename by appending .yaml to the original filename (which is `relative_path`)
+                    # and placing it in the tmpl_output_dir.
+                    # The `output_filepath` is already `os.path.join(tmpl_output_dir, relative_path)`.
+                    # So we just append `.yaml` to `output_filepath`.
+                    final_output_filepath = output_filepath + '.yaml'
+                    
+                    # Ensure subdirectory structure exists for the new final_output_filepath
+                    final_output_file_dir = os.path.dirname(final_output_filepath)
+                    if not os.path.exists(final_output_file_dir):
+                        os.makedirs(final_output_file_dir)
 
-                elif filename.endswith(('.yaml', '.yml')): # Assuming other templates are YAML
+                    with open(final_output_filepath, 'w', encoding='utf-8') as f_out:
+                        yaml.dump(substituted_data, f_out, allow_unicode=True, sort_keys=False)
+                    logging.info(f"Processed properties file {filename} and wrote to {final_output_filepath}")
+
+                elif '.yaml' in filename and '.properties' not in filename: # Process as YAML if not already handled as properties
                     # Preprocess for {{placeholders}} that are not quoted
                     preprocessed_content = preprocess_yaml_content(content)
                     # Load YAML
                     data_to_substitute = yaml.load(preprocessed_content, Loader=yaml.SafeLoader)
                     # Substitute placeholders
                     substituted_data = substitute_placeholders(data_to_substitute, records_context)
+                    # Output filename remains the same (including .tmpl if present)
+                    # The `output_filepath` is already correctly set as os.path.join(tmpl_output_dir, relative_path)
                     with open(output_filepath, 'w', encoding='utf-8') as f_out:
                         yaml.dump(substituted_data, f_out, allow_unicode=True, sort_keys=False)
-                    logging.info(f"Processed and wrote {filename} to {output_filepath}")
+                    logging.info(f"Processed YAML file {filename} and wrote to {output_filepath}")
                 
                 else:
-                    logging.debug(f"Skipping file (not a .properties.tmpl or .yaml/.yml template): {filename}")
+                    logging.debug(f"Skipping file (does not contain .properties or .yaml, or was already handled): {filename}")
 
             except PlaceholderNotFoundError as e:
                 logging.error(f"Error processing template file {input_filepath}: {e}")
