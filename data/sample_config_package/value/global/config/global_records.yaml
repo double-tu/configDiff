@@ -1,0 +1,7 @@
+# Global records, lower priority
+default_replicas: 2
+app_version: "1.0.0-global"
+global_setting_from_records: "This is a global record"
+app_specific_value: "global_placeholder_val" # Will be overridden by perf/values.yaml for MyApplication in perf
+default_retries: 3
+cron_schedule: "0 0 * * *"

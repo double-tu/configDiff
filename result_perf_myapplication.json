@@ -1,0 +1,30 @@
+{
+  "- name": "\"MyApplication\"",
+  "type": "\"WebService\"",
+  "properties": {
+    "configs": {
+      "private": {
+        "version": "\"1.0\"",
+        "schema": {
+          "type": "\"object\"",
+          "properties": {
+            "port": {
+              "logging_level": {
+                "global_configs": {
+                  "feature_flags": {
+                    "new_dashboard": "true",
+                    "experimental_api": "false",
+                    "timeout_settings": {
+                      "connect_ms": "5000",
+                      "read_ms": "10000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

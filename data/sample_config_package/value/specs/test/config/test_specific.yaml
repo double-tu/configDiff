@@ -1,0 +1,5 @@
+# Test specific configurations
+test_runner: "pytest"
+coverage_threshold: 70
+# This file could override global/resources.yaml if named 'resources.yaml'
+# or override common_settings.yaml if named 'common_settings.yaml'

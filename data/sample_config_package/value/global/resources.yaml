@@ -1,0 +1,31 @@
+# Main resources file
+services:
+  - name: "MyApplication"
+    type: "WebService"
+    properties:
+      configs:
+        private:
+          version: "1.0"
+          schema:
+            $ref: "config/common_settings.yaml#/schemas/service_schema"
+          records:
+            <<:
+              - $ref: "config/perf_records.yaml#" # Will be overridden by perf specific if env is perf
+              - $ref: "config/global_records.yaml#"
+            default_app_setting: "global_default_value"
+            specific_app_key: "{{app_specific_value}}" # Placeholder
+          perf_prop_settings: # Section to test properties file inclusion
+            $ref: "config/perf_specific_settings.properties#" # Ref to the properties file
+      deployment:
+        replicas: {{default_replicas}}
+        image: "myapp:{{app_version}}"
+
+  - name: "AnotherService"
+    type: "BatchJob"
+    properties:
+      configs:
+        private:
+          records:
+            job_timeout: "3600s"
+            retry_attempts: "{{default_retries}}"
+      schedule: "{{cron_schedule}}"

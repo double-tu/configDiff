@@ -1,0 +1,15 @@
+# Common settings and schemas
+schemas:
+  service_schema:
+    type: "object"
+    properties:
+      port: { type: "integer", default: 8080 }
+      logging_level: { type: "string", default: "INFO" }
+
+global_configs:
+  feature_flags:
+    new_dashboard: true
+    experimental_api: false
+  timeout_settings:
+    connect_ms: 5000
+    read_ms: 10000

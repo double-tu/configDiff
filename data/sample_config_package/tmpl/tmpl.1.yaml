@@ -1,0 +1,8 @@
+configs:
+  private:
+    redis:
+      host: {{redis.host}}
+      port: {{redis.port}}
+      password: {{redis.password}}
+      default_replicas: 5 # Higher than global
+      app_version: "1.2.3-perf"

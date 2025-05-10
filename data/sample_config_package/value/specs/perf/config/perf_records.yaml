@@ -1,0 +1,13 @@
+# Perf specific records for MyApplication
+app_specific_value: "Value from perf_records for app_specific_value placeholder"
+default_replicas: 5 # Higher than global
+app_version: "1.2.3-perf"
+db_host: "perf-db.example.com"
+db_user: "perf_user"
+from_perf_records: true
+complex_url: "http://{{db_host}}/api?user={{db_user}}" # Placeholder within records
+default_app_setting: "perf_default_value" # Overrides global_records for this key
+redis:
+  host: "redis.example.com"
+  port: 6379
+  password: "redis_password"

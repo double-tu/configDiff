@@ -1,0 +1,25 @@
+# Values specific to 'perf' environment
+# These will be used as context for placeholder substitution for the selected service
+# if this service's properties.configs.private.records refers to it or if these are directly used.
+
+# For MyApplication service in perf environment
+# This structure is illustrative; the actual values for substitution
+# come from the 'properties.configs.private.records' section of the *selected service*
+# after all $ref and <<: are resolved.
+# Let's assume 'MyApplication' in 'perf' will have its 'records' populated from here via $ref:
+
+# To make this file directly usable as a source for MyApplication's records via $ref:
+services_context:
+  MyApplication:
+    properties:
+      configs:
+        private:
+          records:
+            app_specific_value: "perf_specific_value_for_app"
+            default_replicas: 5 # Higher than global
+            app_version: "1.2.3-perf"
+            db_host: "perf-db.example.com"
+            db_user: "perf_user"
+            from_perf_values: true
+            # Example of a value that itself contains a placeholder, to be resolved from this same context
+            complex_url: "http://{{db_host}}/api?user={{db_user}}"
